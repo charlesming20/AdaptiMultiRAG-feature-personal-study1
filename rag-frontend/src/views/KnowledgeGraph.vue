@@ -134,6 +134,52 @@ const updateStats = (data) => {
   }
 }
 
+const getRelationText = (edge) => {
+  const properties = edge.properties || {}
+  const candidates = [
+    properties.description,
+    properties.relation,
+    properties.relationship,
+    properties.keywords,
+    edge.type
+  ]
+  const text = candidates.find(value => value !== undefined && value !== null && String(value).trim())
+  return text ? String(text).trim() : 'RELATED'
+}
+
+const getRelationLabel = (edge) => {
+  const text = getRelationText(edge)
+  return text.length > 28 ? `${text.slice(0, 28)}...` : text
+}
+
+const formatRelationTooltip = (edge) => {
+  const properties = edge.properties || {}
+  const relationText = getRelationText(edge)
+  const source = edge.sourceName || edge.source
+  const target = edge.targetName || edge.target
+  const rows = [
+    `<strong>${source}</strong>`,
+    `<span style="color:#409eff;">→ ${relationText}</span>`,
+    `<strong>${target}</strong>`
+  ]
+
+  if (properties.keywords && String(properties.keywords) !== relationText) {
+    rows.push(`<span style="color:#666;">关键词: ${properties.keywords}</span>`)
+  }
+  if (properties.weight !== undefined && properties.weight !== null) {
+    rows.push(`<span style="color:#666;">权重: ${properties.weight}</span>`)
+  }
+  if (properties.source_id) {
+    rows.push(`<span style="color:#999;">来源: ${properties.source_id}</span>`)
+  }
+
+  return `
+    <div style="max-width: 420px; line-height: 1.6; white-space: normal;">
+      ${rows.join('<br/>')}
+    </div>
+  `
+}
+
 // 渲染图谱
 const renderGraph = (data) => {
   if (!chartInstance || !data.nodes) return
@@ -154,14 +200,29 @@ const renderGraph = (data) => {
     }
   }))
 
+  const nodeNameById = new Map(nodes.map(node => [node.id, node.name]))
+
   // 处理边数据
   const links = data.edges ? data.edges.map(edge => ({
     source: edge.source,
     target: edge.target,
-    name: edge.type || 'RELATED',
+    name: getRelationLabel(edge),
+    relationText: getRelationText(edge),
+    properties: edge.properties || {},
+    sourceName: nodeNameById.get(edge.source) || edge.source,
+    targetName: nodeNameById.get(edge.target) || edge.target,
     lineStyle: {
       color: '#999',
       width: 2
+    },
+    label: {
+      show: true,
+      formatter: getRelationLabel(edge),
+      fontSize: 10,
+      color: '#666',
+      backgroundColor: 'rgba(255,255,255,0.85)',
+      padding: [2, 4],
+      borderRadius: 3
     }
   })) : []
 
@@ -197,7 +258,7 @@ const renderGraph = (data) => {
             </div>
           `
         } else if (params.dataType === 'edge') {
-          return `关系: ${params.data.name}`
+          return formatRelationTooltip(params.data)
         }
       }
     },
@@ -229,6 +290,16 @@ const renderGraph = (data) => {
         color: 'source',
         curveness: 0.3
       },
+      edgeLabel: {
+        show: true,
+        fontSize: 10,
+        color: '#666',
+        formatter: function(params) {
+          return params.data.name
+        }
+      },
+      edgeSymbol: ['none', 'arrow'],
+      edgeSymbolSize: [0, 8],
       emphasis: {
         disabled: true
       }
